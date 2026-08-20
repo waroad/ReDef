@@ -34,7 +34,7 @@ def get_qwen_text(code_content, label, encoding_type):
         'Reversed_diff_tags': "The code is a diff representation. <DEL> indicates deleted lines and <ADD> indicates added lines.",
         
         'Added_to_Deleted': "The code consists specifically of the actual added and deleted lines, organized under [ADDED LINES] and [DELETED LINES] headers.",
-        'Swapped_added/deleted_blocks': "The code consists specifically of the actual added and deleted lines, organized under [ADDED LINES] and [DELETED LINES] headers."
+        'Swapped_added_deleted_blocks': "The code consists specifically of the actual added and deleted lines, organized under [ADDED LINES] and [DELETED LINES] headers."
     }
     type_desc = desc_map.get(encoding_type, "") 
     messages = [
@@ -141,8 +141,8 @@ def process_encoding(args, tokenizer, example, encoding_type, max_seq_length, is
                 for line in after_lines[j1:j2]: diff_lines.append(f'{add_header} ' + line)
         final_code_text = '\n'.join(diff_lines)
 
-    # 9. Swapped_added/deleted_blocks
-    elif encoding_type == "Swapped_added/deleted_blocks":
+    # 9. Swapped_added_deleted_blocks
+    elif encoding_type == "Swapped_added_deleted_blocks":
         added_text = ' '.join([line for tag, i1, i2, j1, j2 in matcher.get_opcodes() if tag in ['insert', 'replace'] for line in after_lines[j1:j2]])
         deleted_text = ' '.join([line for tag, i1, i2, j1, j2 in matcher.get_opcodes() if tag in ['delete', 'replace'] for line in before_lines[i1:i2]])
         
@@ -292,7 +292,7 @@ def parse_args():
     parser.add_argument("--encoding_type", type=str, required=True, help="""Encoding strategy
         'After-only', 'After+Markers', 'Before+After', 
         'Diff_with_tags', 'Added_to_Deleted', 'Spurious_change_markers', 
-        'Swapped_snapshots', 'Reversed_diff_tags', 'Swapped_added/deleted_blocks'""")
+        'Swapped_snapshots', 'Reversed_diff_tags', 'Swapped_added_deleted_blocks'""")
     parser.add_argument("--max_seq_length", type=int, default=612, help="Sequence limit")
     
 
@@ -315,7 +315,7 @@ def main():
 
     print(f"🚀 Begin: Encoding={args.encoding_type}, Limit={args.max_seq_length}")
 
-    current_output_dir = f"outputs_{args.encoding_type}_{args.max_seq_length}_{args.seed}"
+    current_output_dir = f"Qwen_{args.encoding_type}_{args.max_seq_length}_{args.seed}"
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name = "unsloth/Qwen2.5-7B-Instruct-bnb-4bit",
         max_seq_length = args.max_seq_length,
@@ -368,15 +368,17 @@ def main():
         )
 
         if args.encoding_type=="Swapped_snapshots":
-            current_output_dir = f"outputs_Before+After_{args.max_seq_length}_{args.seed}"
+            current_output_dir = f"Qwen_Before+After_{args.max_seq_length}_{args.seed}"
         elif args.encoding_type=="Reversed_diff_tags":
-            current_output_dir = f"outputs_Diff_with_tags_{args.max_seq_length}_{args.seed}"
+            current_output_dir = f"Qwen_Diff_with_tags_{args.max_seq_length}_{args.seed}"
         else: 
             print(f"🚀 From total {num_train_samples}, {len(dataset['train'])}are used for quick training")
             trainer.train()
-
-
-
+               
+    import gc
+    gc.collect()
+    torch.cuda.empty_cache()
+ 
     if args.do_eval and args.encoding_type not in ["Swapped_snapshots", "Reversed_diff_tags"]:
         print("\n" + "="*50)
         print("🧐 Looking for best f1")
@@ -386,15 +388,11 @@ def main():
 
         best_f1 = -1.0
         best_checkpoint = ""
-        model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name = "unsloth/Qwen2.5-7B-Instruct-bnb-4bit", 
-            max_seq_length = args.max_seq_length,
-            load_in_4bit = True,
-        )
+
         for ckpt in checkpoint_dirs:
             print(f"\n[Evaluating] {ckpt}")
             model = FastLanguageModel.for_inference(model) 
-            model.load_adapter(ckpt) 
+            model.load_adapter(ckpt, adapter_name="default")
 
             
             preds, labels = [], []
@@ -427,8 +425,8 @@ def main():
             
             gc.collect()
             torch.cuda.empty_cache()
-            if hasattr(model, "peft_config") and "default" in model.peft_config:
-                model.delete_adapter("default")
+            # if hasattr(model, "peft_config") and "default" in model.peft_config:
+            #     model.delete_adapter("default")
 
         print(f"\n🏆 Final Best Checkpoint: {best_checkpoint} (F1: {best_f1:.4f})")
 
@@ -450,15 +448,15 @@ def main():
 
     if args.do_test:
         if args.encoding_type=="Swapped_snapshots":
-            current_output_dir = f"outputs_Before+After_{args.max_seq_length}_{args.seed}"
+            current_output_dir = f"Qwen_Before+After_{args.max_seq_length}_{args.seed}"
         elif args.encoding_type=="Reversed_diff_tags":
-            current_output_dir = f"outputs_Diff_with_tags_{args.max_seq_length}_{args.seed}"
+            current_output_dir = f"Qwen_Diff_with_tags_{args.max_seq_length}_{args.seed}"
         print("\n" + "="*50)
         print("Begin Dataset Testing")
         print("="*50)
         best_model_path = os.path.join(current_output_dir, "best_f1_checkpoint")
 
-        model.load_adapter(best_model_path)
+        model.load_adapter(best_model_path, adapter_name="default")
         FastLanguageModel.for_inference(model) 
 
         results_true = []
@@ -517,7 +515,7 @@ def main():
 
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        with open("fse_results.txt", "a") as f:
+        with open("result_qwen.txt", "a") as f:
             f.write(f"[{current_time}] Type: {args.encoding_type}, Limit: {args.max_seq_length}, Seed: {args.seed} "
                     f"Acc: {accuracy:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}\n")
 

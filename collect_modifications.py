@@ -13,7 +13,10 @@ import json
 import random
 import subprocess
 from datetime import datetime, timedelta
-api_key = 'put appropriate key here'
+api_key = os.getenv("OPENAI_API_KEY", "Place_your_API_key_here")
+
+if api_key == "Place_your_API_key_here":
+    print("⚠️ Error: OpenAI API Key is missing. Please provide it via environment variable.")
 
 
 def run_git_command(cmd, cwd):
@@ -43,6 +46,10 @@ def extract_reverted_commit(message):
 
 
 def save_revert_pairs(repo_name):
+    """
+    Scans git logs for revert commits to extract their referenced original hashes, 
+    filtering for single-file C/C++ edits to establish initial defective candidates.
+    """
     repo_path = os.path.join(os.path.dirname(__file__), repo_name)
     if not os.path.exists(repo_path):
         print(f"Repository {repo_name} not found at {repo_path}")
@@ -127,11 +134,14 @@ def save_revert_pairs(repo_name):
             f.write(json.dumps(item, ensure_ascii=False) + '\n')
 
     print(f"Found {len(revert_data)} revert pairs")
-    print(f"Saved to {repo_name}_defective_.jsonl")
+    print(f"Saved to {repo_name}_defective_1.jsonl")
 
 
 def extract_single_function_commits(jsonl_file, repo_name):
-    """Extract functions from revert commits"""
+    """
+    Parses git diffs and uses ctags to isolate modifications confined to exactly one function, 
+    extracting the raw "before" and "after" code states for analysis.
+    """
     cnt=0
 
     repo_path = os.path.join(os.path.dirname(__file__), repo_name)
@@ -255,7 +265,8 @@ def extract_single_function_commits(jsonl_file, repo_name):
 
 def extract_function_by_name(file_content, func_name):
     """
-    ctags to extract certain function
+    Locates a target function's start line using ctags and determines its exact boundaries 
+    via brace-matching logic to extract the complete function body from the file content.
     """
     if not file_content or not func_name:
         return None
@@ -394,8 +405,11 @@ def extract_function_by_name(file_content, func_name):
 
 
 def get_function_names_at_lines(commit_hash, file_path, line_numbers, repo_path):
-    """Extract functions using ctags - returns empty list if all lines are outside functions"""
-
+    """
+    Retrieves the file content at a specific commit and uses ctags to identify 
+    which unique function names encompass the provided list of modified line numbers.
+    """
+    
     # Get file content
     cmd = ['git', 'show', f'{commit_hash}:{file_path}']
     file_content = subprocess.run(cmd, capture_output=True, text=True,
@@ -444,7 +458,10 @@ def get_function_names_at_lines(commit_hash, file_path, line_numbers, repo_path)
 
 
 def filter_only_bug_related(jsonl_file, repo_name, api_key=None, gpt_model="gpt-4o"):
-    """Filter only bug-related commits using GPT-4o"""
+    """
+    Employs GPT-4o under a unanimous 3-vote triage rubric to filter out non-defect reverts, 
+    retaining only high-confidence, genuinely bug-related modifications.
+    """
 
     # API key setup
     if api_key:
@@ -673,23 +690,10 @@ Cases to analyze:
 
 
 
-
-
-
-
-
-
-
-
-
-
-
 def collect_clean_commits(repo_name, defective_file):
     """
-    Collect potentially clean commits from a repository.
-
-    Args:
-        repo_path: Path of the git repository
+    Gathers contemporary single-function commits and inspects up to 5 subsequent changes 
+    via post-hoc history checks to eliminate potential false-clean labels.
     """
 
     repo_path = os.path.join(os.path.dirname(__file__), repo_name)
@@ -876,9 +880,6 @@ def collect_clean_commits(repo_name, defective_file):
     print(f"Collected {len(clean_candidates)} clean commit candidates")
 
 
-
-
-
 def get_commit_details(repo_path, commit_hash, file_path, func_name):
     """Get detailed information about a commit."""
 
@@ -986,7 +987,10 @@ def is_single_function_modification(repo_path, commit_hash):
 
 
 def classify_clean_commits(repo_name, clean_file, gpt_model="gpt-4o"):
-    """Classify clean commits into bug-fix or improvement and filter problematic ones"""
+    """
+    Utilizes GPT-4o to categorize clean candidates into bug fixes or feature improvements, 
+    ensuring rigorous data sorting through a mandatory unanimous vote criteria.
+    """
 
     repo_path = os.path.join(os.path.dirname(__file__), repo_name)
     # API key setup
@@ -1137,10 +1141,66 @@ Cases:
     print(f"Saved to: {output_file}")
 
 
+def preview_commits(repo_name):
+    repo_path = os.path.join(os.path.dirname(__file__), repo_name)
+    output_file1 = f'{repo_path}_defective_3.jsonl'
+    output_file2 = f'{repo_path}_clean_2.jsonl'
+
+    def get_line_count(file_path):
+        if not os.path.exists(file_path):
+            return 0
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return sum(1 for _ in f)
+
+    defective_total = get_line_count(output_file1)
+    clean_total = get_line_count(output_file2)
+
+    print("\n" + "="*50)
+    print(f"📊 [Collection Summary for {repo_name}]")
+    print(f" - Total Defective Commits: {defective_total}")
+    print(f" - Total Clean Commits:     {clean_total}")
+    print("="*50)
+
+    # 3. Defective Preview
+    if defective_total > 0:
+        print("\n>>> Preview of the first 3 defective items:")
+        with open(output_file1, 'r', encoding='utf-8') as f:
+            for i, line in enumerate(f):
+                if i >= 3: break
+                print(f"[{i+1}] {line.strip()}")
+    else:
+        print("\n>>> No defective items found to preview.")
+
+    # 4. Clean Preview
+    if clean_total > 0:
+        print("\n>>> Preview of the first 3 clean items:")
+        with open(output_file2, 'r', encoding='utf-8') as f:
+            for i, line in enumerate(f):
+                if i >= 3: break
+                print(f"[{i+1}] {line.strip()}")
+    else:
+        print("\n>>> No clean items found to preview.")
+
+    print("\n" + "="*50)
+    print(f"📊 [Collection Summary for {repo_name}]")
+    print(f" - Total Defective Commits: {defective_total}")
+    print(f" - Total Clean Commits:     {clean_total}")
+    print("="*50)
+
+
+
 if __name__ == "__main__":
-    repo_name = sys.argv[1] if len(sys.argv) > 1 else "ladybird"
-    save_revert_pairs(repo_name)
-    extract_single_function_commits(f"{repo_name}_defective_1.jsonl", repo_name)
-    filter_only_bug_related(f"{repo_name}_defective_2.jsonl", repo_name, api_key=api_key)
-    collect_clean_commits(repo_name, f"{repo_name}_defective_3.jsonl")
-    classify_clean_commits(repo_name, f"{repo_name}_clean_1.jsonl")
+    if len(sys.argv) < 2:
+        print("\n[Usage Guide]")
+        print("python collect_modifications.py <folder_name_1> <folder_name_2> ...")
+        print("Example: python collect_modifications.py ClickHouse Linux ladybird\n")
+        sys.exit(0)
+    for repo_name in sys.argv[1:]:
+        print(f"\n>>> Extracting modifications from: {repo_name}")
+        save_revert_pairs(repo_name)
+        extract_single_function_commits(f"{repo_name}_defective_1.jsonl", repo_name)
+        filter_only_bug_related(f"{repo_name}_defective_2.jsonl", repo_name, api_key=api_key)
+        collect_clean_commits(repo_name, f"{repo_name}_defective_3.jsonl")
+        classify_clean_commits(repo_name, f"{repo_name}_clean_1.jsonl")
+        print(f"--- Done: {repo_name} ---\n")
+        preview_commits(repo_name)

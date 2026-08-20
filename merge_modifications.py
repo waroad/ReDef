@@ -4,12 +4,14 @@ import os
 from collections import defaultdict
 import random
 
-tt1,tt2=0,0
+total_defective_cnt,total_clean_cnt=0,0
 def split_dataset_by_time():
-    global tt1, tt2
+    """
+    Split Policy: Chronologically splits data into Train/Valid/Test (8:1:1) per project.
+    """
+    global total_defective_cnt, total_clean_cnt
     # Group by project
     project_data = defaultdict(list)
-    all_defective_data = []  # For sampling
 
     file_paths = glob.glob('./*_defective_3.jsonl') + glob.glob('./*_clean_2.jsonl')
     print("Total Repos:", len(file_paths)//2)
@@ -31,7 +33,6 @@ def split_dataset_by_time():
                 elif '3/3' not in confidence:
                         continue
                 project_data[project_name].append(data)
-                all_defective_data.append(data)
 
     train_data_all = []
     valid_data_all = []
@@ -43,14 +44,14 @@ def split_dataset_by_time():
         entries.sort(key=lambda x: x.get('date', x.get('timestamp', '')))
 
         # Separate by label
-        fixed_0 = [e for e in entries if e['defective_modification'] == 0]
-        fixed_1 = [e for e in entries if e['defective_modification'] == 1]
+        current_clean_modifications = [e for e in entries if e['defective_modification'] == 0]
+        current_defective_modifications = [e for e in entries if e['defective_modification'] == 1]
 
         # Balance 1:1 ratio per project
-        min_count = min(len(fixed_0), len(fixed_1))
-        tt1+=len(fixed_1)
-        tt2+=len(fixed_0)
-        print(project, "defective modification:", len(fixed_1), "clean modification:", len(fixed_0))
+        min_count = min(len(current_clean_modifications), len(current_defective_modifications))
+        total_defective_cnt+=len(current_defective_modifications)
+        total_clean_cnt+=len(current_clean_modifications)
+        print(project, "defective modification:", len(current_defective_modifications), "clean modification:", len(current_clean_modifications))
 
         # Time match split
         def split_by_time(data, ratios=[0.8, 0.1, 0.1]):
@@ -68,12 +69,12 @@ def split_dataset_by_time():
 
             return train, valid, test
 
-        train_0, valid_0, test_0 = split_by_time(fixed_0)
-        train_1, valid_1, test_1 = split_by_time(fixed_1)
+        train_split_clean, valid_split_clean, test_split_clean = split_by_time(current_clean_modifications)
+        train_split_defective, valid_split_defective, test_split_defective = split_by_time(current_defective_modifications)
 
-        train_data_all.extend(train_0 + train_1)
-        valid_data_all.extend(valid_0 + valid_1)
-        test_data_all.extend(test_0 + test_1)
+        train_data_all.extend(train_split_clean + train_split_defective)
+        valid_data_all.extend(valid_split_clean + valid_split_defective)
+        test_data_all.extend(test_split_clean + test_split_defective)
 
     random.shuffle(train_data_all)
     random.shuffle(valid_data_all)
@@ -91,9 +92,9 @@ def split_dataset_by_time():
         for entry in data:
             if entry['defective_modification'] == 0:
                 cnt += 1
-        print(f"  defective_modification=0: {cnt}, defective_modification=1: {len(data) - cnt}")
+        print(f"  defective_modification=1: {len(data) - cnt}, defective_modification=0: {cnt}")
 
 
 random.seed(42)
 split_dataset_by_time()
-print(f"Total defective modification: {tt1}, Total clean modification:  {tt2}")
+print(f"Total defective modification: {total_defective_cnt}, Total clean modification:  {total_clean_cnt}")

@@ -383,7 +383,7 @@ def convert_examples_to_features(js, tokenizer, args):
         source_ids += [tokenizer.pad_token_id] * padding_length
 
         return InputFeatures(source_tokens, source_ids, label)
-    elif args.encoding_type=="Swapped_added/deleted_blocks":
+    elif args.encoding_type=="Swapped_added_deleted_blocks":
         added_lines = []
         deleted_lines = []
 
@@ -728,11 +728,11 @@ def test(args, model, tokenizer):
     from sklearn.metrics import average_precision_score
     ap = average_precision_score(labels_binary, prob_scores)
     print(f"Accuracy: {accuracy:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f} PR-AUC: {ap:.4f}")
-    with open(f'result_base.txt', 'a') as f:  # 'a' mode appends to existing content
+    with open(f'result_PLM.txt', 'a') as f:  # 'a' mode appends to existing content
         f.write(
-            f"{args.model_type} {args.encoding_type} {args.test_data_file} acc: {accuracy} f1: {f1}, precision: {precision}, recall: {recall}, PR-AUC: {ap:.4f} \n")
+            f"{args.model_name_or_path} {args.encoding_type} {args.test_data_file} acc: {accuracy} f1: {f1}, precision: {precision}, recall: {recall}, PR-AUC: {ap:.4f} \n")
 
-def main(seed1):
+def main(seed1=-1):
     parser = argparse.ArgumentParser()
 
     ## Required parameters
@@ -778,9 +778,9 @@ def main(seed1):
     parser.add_argument("--do_lower_case", action='store_true',
                         help="Set this flag if you are using an uncased model.")
 
-    parser.add_argument("--train_batch_size", default=6, type=int,
+    parser.add_argument("--train_batch_size", default=8, type=int,
                         help="Batch size per GPU/CPU for training.")
-    parser.add_argument("--eval_batch_size", default=6, type=int,
+    parser.add_argument("--eval_batch_size", default=8, type=int,
                         help="Batch size per GPU/CPU for evaluation.")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
@@ -841,10 +841,13 @@ def main(seed1):
                                                                          "'After-only', 'After+Markers', 'Before+After', "
                                                                          "'Diff_with_tags', 'Added_to_Deleted', "
                                                                          "'Spurious_change_markers', 'Swapped_snapshots', "
-                                                                         "'Reversed_diff_tags', 'Swapped_added/deleted_blocks'")
+                                                                         "'Reversed_diff_tags', 'Swapped_added_deleted_blocks'")
 
     args = parser.parse_args()
-    args.seed+=seed1
+    if seed1 != -1:
+        args.seed+=seed1
+        args.output_dir+="_"+str(seed1)
+
     # Setup distant debugging if needed
     if args.server_ip and args.server_port:
         # Distant debugging - see https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
@@ -880,7 +883,7 @@ def main(seed1):
     logger.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
                    args.local_rank, device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
 
-    with open(f'result_base.txt', 'a') as f:  # 'a' mode appends to existing content
+    with open(f'result_PLM.txt', 'a') as f:  # 'a' mode appends to existing content
         f.write(f"-------------------------{datetime.now()}------------------------- \n")
 
     # Set seed
@@ -955,7 +958,7 @@ def main(seed1):
         num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
         logger.info(f"Added {num_added_toks} special tokens")
         base_model.resize_token_embeddings(len(tokenizer))
-    elif args.encoding_type in ["Added_to_Deleted", "Swapped_added/deleted_blocks"]:
+    elif args.encoding_type in ["Added_to_Deleted", "Swapped_added_deleted_blocks"]:
         special_tokens_dict = {
             'additional_special_tokens': [
                 '[ADDED LINES]', '[DELETED LINES]'
@@ -987,7 +990,7 @@ def main(seed1):
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        checkpoint_prefix = 'checkpoint-best-acc/pytorch_model.bin'
+        checkpoint_prefix = 'checkpoint-best-f1/pytorch_model.bin'
         output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))
         model.load_state_dict(torch.load(output_dir))
         model.to(args.device)
@@ -1007,12 +1010,12 @@ def main(seed1):
 
 
 if __name__ == "__main__":
-    main(1)
-    main(2)
-    main(3)
+    main()
+    # main(1)
+    # main(2)
+    # main(3)
     # main(4)
     # main(5)
     # main(7)
     # main(8)
     # main(9)
-    # main(10)

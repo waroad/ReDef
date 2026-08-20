@@ -35,7 +35,7 @@ def get_qwen_text(code_content, label, encoding_type):
         'Reversed_diff_tags': "The code is a diff representation. <DEL> indicates deleted lines and <ADD> indicates added lines.",
         
         'Added_to_Deleted': "The code consists specifically of the actual added and deleted lines, organized under [ADDED LINES] and [DELETED LINES] headers.",
-        'Swapped_added/deleted_blocks': "The code consists specifically of the actual added and deleted lines, organized under [ADDED LINES] and [DELETED LINES] headers."
+        'Swapped_added_deleted_blocks': "The code consists specifically of the actual added and deleted lines, organized under [ADDED LINES] and [DELETED LINES] headers."
     }
     type_desc = desc_map.get(encoding_type, "") 
     messages = [
@@ -142,8 +142,8 @@ def process_encoding(args, tokenizer, example, encoding_type, max_seq_length, is
                 for line in after_lines[j1:j2]: diff_lines.append(f'{add_header} ' + line)
         final_code_text = '\n'.join(diff_lines)
 
-    # 9. Swapped_added/deleted_blocks
-    elif encoding_type == "Swapped_added/deleted_blocks":
+    # 9. Swapped_added_deleted_blocks
+    elif encoding_type == "Swapped_added_deleted_blocks":
         added_text = ' '.join([line for tag, i1, i2, j1, j2 in matcher.get_opcodes() if tag in ['insert', 'replace'] for line in after_lines[j1:j2]])
         deleted_text = ' '.join([line for tag, i1, i2, j1, j2 in matcher.get_opcodes() if tag in ['delete', 'replace'] for line in before_lines[i1:i2]])
         
@@ -229,7 +229,7 @@ def parse_args():
     parser.add_argument("--encoding_type", type=str, required=True, help="""Encoding strategy
         'After-only', 'After+Markers', 'Before+After', 
         'Diff_with_tags', 'Added_to_Deleted', 'Spurious_change_markers', 
-        'Swapped_snapshots', 'Reversed_diff_tags', 'Swapped_added/deleted_blocks'""")
+        'Swapped_snapshots', 'Reversed_diff_tags', 'Swapped_added_deleted_blocks'""")
     parser.add_argument("--max_seq_length", type=int, default=612, help="Sequence limit")
 
 
@@ -313,7 +313,7 @@ def main():
 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    with open("fse_zero_shot_results.txt", "a") as f:
+    with open("result_qwen_zero_shot.txt", "a") as f:
         f.write(f"[{current_time}] Type: {args.encoding_type}, Limit: {args.max_seq_length}, Seed: {args.seed} "
                 f"Acc: {accuracy:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}\n")
 
