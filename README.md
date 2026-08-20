@@ -172,11 +172,15 @@ python run_qwen_zero_shot.py \
 ## 📖 Citation
 
 ```bibtex
-@inproceedings{nam2026redef,
-  title={ReDef: Do Code Language Models Truly Understand Code Changes for Just-in-Time Software Defect Prediction?},
-  author={Nam, Doha and Kim, Taehyoun and Ryu, Duksan and Baik, Jongmoon},
-  booktitle={Proceedings of the ACM International Conference on the Foundations of Software Engineering (FSE)},
-  year={2026},
-  doi={10.1145/3808179}
+@article{nam2026redef,
+  author    = {Nam, Doha and Kim, Taehyoun and Ryu, Duksan and Baik, Jongmoon},
+  title     = {ReDef: Do Code Language Models Truly Understand Code Changes for Just-in-Time Software Defect Prediction?},
+  journal   = {Proceedings of the ACM on Software Engineering},
+  volume    = {3},
+  number    = {FSE},
+  articleno = {FSE172},
+  year      = {2026},
+  doi       = {10.1145/3808179},
+  publisher = {Association for Computing Machinery}
 }
 ```
